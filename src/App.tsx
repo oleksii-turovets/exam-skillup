@@ -1,6 +1,6 @@
 import './reset.css'
 import './App.scss'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import axios from 'axios'
 import { omit } from 'lodash'
 import CartItem from './components/CartItem/CartItem'
@@ -85,11 +85,15 @@ const App = (props: Props) => {
             rate: 1,
         }
     )
+
+    const [currenciesRates, setCurrenciesRates] =
+        useState<ConvertedCurrencyRate>([])
+
     const [productsInCart, setProductsInCart] = useState<ProductsInCart>({})
 
     const [isMessageShown, setIsMessageShown] = useState<boolean>(false)
 
-    const changeCurrentCurrency = (newCode: number) => {
+    useEffect(() => {
         axios
             .get('https://api.monobank.ua/bank/currency')
             .then((res) => res.data)
@@ -121,13 +125,7 @@ const App = (props: Props) => {
                     ])
                 )
             )
-            .then((res) =>
-                setCurrentCurrency((prevState) => ({
-                    ...prevState,
-                    code: newCode,
-                    rate: res[newCode],
-                }))
-            )
+            .then((res) => setCurrenciesRates(res))
             .catch((error) => {
                 if (error.response) {
                     alert(
@@ -139,6 +137,14 @@ const App = (props: Props) => {
                     )
                 }
             })
+    }, [])
+
+    const changeCurrentCurrency = (newCode: number) => {
+        setCurrentCurrency((prevState) => ({
+            ...prevState,
+            code: newCode,
+            rate: currenciesRates[newCode],
+        }))
     }
 
     const addProductToCart = (id: number) => {
@@ -174,8 +180,7 @@ const App = (props: Props) => {
                         <h1 className="title">Three-products shop</h1>
                         <div className="currency-choosing">
                             <div className="instruction">
-                                Choose your currency (Please, do not change it
-                                too often. Monobank API doesn't like that)
+                                Choose your currency
                             </div>
                             <ul className="currency-filter">
                                 {currenciesArray.map((code) => (
