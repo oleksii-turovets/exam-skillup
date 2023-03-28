@@ -2,10 +2,13 @@ import './reset.css'
 import './App.scss'
 import { useState } from 'react'
 import axios from 'axios'
+import { omit } from 'lodash'
+import CartItem from './components/CartItem/CartItem'
+import PopUpMessage from './components/PopUpMessage/PopUpMessage'
 
 type Props = {}
 
-type Product = {
+export type Product = {
     id: number
     title: string
     description: string
@@ -23,45 +26,70 @@ type MonoCurrencyRate = {
 }
 
 type ConvertedCurrencyRate = {
-    [code:number]: number
+    [code: number]: number
+}
+type CurrentCurrencyRate = {
+    code: number
+    rate: number
 }
 
+type ProductsInCart = {
+    [id: number]: number
+}
+
+const productsArray: Product[] = [
+    {
+        id: 1,
+        title: 'iPhone 14 Pro',
+        description: 'This is iPhone 14 Pro',
+        price: 1000,
+        currency: 'EUR',
+    },
+    {
+        id: 2,
+        title: 'iPhone 13',
+        description: 'This is iPhone 13',
+        price: 800,
+        currency: 'EUR',
+    },
+    {
+        id: 3,
+        title: 'iPhone 12',
+        description: 'This is iPhone 12',
+        price: 500,
+        currency: 'EUR',
+    },
+]
+
+const productsObject: { [id: number]: Product } = productsArray.reduce(
+    (object, product) => ({
+        ...object,
+        [product.id]: product,
+    }),
+    {}
+)
+
+const currencyCodesObject: { [code: number]: string } = {
+    980: 'UAH',
+    840: 'USD',
+    978: 'EUR',
+    826: 'GBP',
+    985: 'PLN',
+}
+const currenciesArray: number[] = [980, 840, 978, 826, 985]
+
 const App = (props: Props) => {
-    const [currentCurrency, setCurrentCurrency] = useState<number>(978)
-
-    const productsArray: Product[] = [
+    const [currentCurrency, setCurrentCurrency] = useState<CurrentCurrencyRate>(
         {
-            id: 1,
-            title: 'iPhone 14 Pro',
-            description: 'This is iPhone 14 Pro',
-            price: 1000,
-            currency: 'EUR',
-        },
-        {
-            id: 2,
-            title: 'iPhone 13',
-            description: 'This is iPhone 13',
-            price: 800,
-            currency: 'EUR',
-        },
-        {
-            id: 3,
-            title: 'iPhone 12',
-            description: 'This is iPhone 12',
-            price: 500,
-            currency: 'EUR',
-        },
-    ]
+            code: 978,
+            rate: 1,
+        }
+    )
+    const [productsInCart, setProductsInCart] = useState<ProductsInCart>({})
 
-    const currencyCodesObject: { [code: number]: string } = {
-        980: 'UAH',
-        840: 'USD',
-        978: 'EUR',
-        826: 'GBP',
-        985: 'PLN',
-    }
+    const [isMessageShown, setIsMessageShown] = useState<boolean>(false)
 
-    const getCurrencyRates = () =>
+    const changeCurrentCurrency = (newCode: number) => {
         axios
             .get('https://api.monobank.ua/bank/currency')
             .then((res) => res.data)
@@ -70,7 +98,7 @@ const App = (props: Props) => {
                     .filter(
                         (item) =>
                             item.currencyCodeB! === 980 &&
-                            [840, 978, 826, 985].includes(item.currencyCodeA!)
+                            currenciesArray.includes(item.currencyCodeA!)
                     )
                     .reduce(
                         (object, rate) => ({
@@ -86,13 +114,50 @@ const App = (props: Props) => {
                     )
             )
             .then((res: ConvertedCurrencyRate) =>
-                Object.fromEntries(Object.entries(res).map((currData) => [
-                    currData[0],
-                    Math.round(currData[1] / res[978] * 10000) / 10000,
-                ]))
+                Object.fromEntries(
+                    Object.entries(res).map((currData) => [
+                        currData[0],
+                        Math.round((res[978] / currData[1]) * 10000) / 10000,
+                    ])
+                )
             )
-            .then((res) => console.log(res))
-            .catch((e) => console.log(e))
+            .then((res) =>
+                setCurrentCurrency((prevState) => ({
+                    ...prevState,
+                    code: newCode,
+                    rate: res[newCode],
+                }))
+            )
+            .catch((error) => {
+                if (error.response) {
+                    alert(
+                        `Something went wrong! ${error.response.data.errorDescription}. Please, try again later!`
+                    )
+                } else {
+                    alert(
+                        `Something went wrong! Problems on our side. We will fix them soon. Please, try again later!`
+                    )
+                }
+            })
+    }
+
+    const addProductToCart = (id: number) => {
+        setProductsInCart((prevState) => ({
+            ...prevState,
+            [id]: (prevState[id] || 0) + 1,
+        }))
+    }
+
+    const removeProductFromCart = (id: number) => {
+        setProductsInCart((prevState) => omit(prevState, id))
+    }
+
+    const changeProductQuantity = (id: number, count: number) => {
+        setProductsInCart((prevState) => ({
+            ...prevState,
+            [id]: count,
+        }))
+    }
 
     return (
         <div className="App">
@@ -108,15 +173,32 @@ const App = (props: Props) => {
                     <div className="main-content">
                         <h1 className="title">Three-products shop</h1>
                         <div className="currency-choosing">
-                            <h2></h2>
+                            <div className="instruction">
+                                Choose your currency (Please, do not change it
+                                too often. Monobank API doesn't like that)
+                            </div>
+                            <ul className="currency-filter">
+                                {currenciesArray.map((code) => (
+                                    <li
+                                        key={code}
+                                        className={
+                                            currentCurrency.code === code
+                                                ? 'active'
+                                                : ''
+                                        }
+                                    >
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                changeCurrentCurrency(code)
+                                            }
+                                        >
+                                            {currencyCodesObject[code]}
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
                         </div>
-                        <ul className="currency-filter">
-                            <li>USD</li>
-                            <li>EUR</li>
-                            <li>UAH</li>
-                            <li>GBP</li>
-                            <li>PLN</li>
-                        </ul>
                         <div className="products">
                             <h2>Our products</h2>
                             <ul className="products-list">
@@ -136,16 +218,21 @@ const App = (props: Props) => {
                                                         {
                                                             currencyCodesObject[
                                                                 currentCurrency
+                                                                    .code
                                                             ]
                                                         }
                                                     </div>
                                                     <div className="price-value">
-                                                        {price}
+                                                        {Math.round(
+                                                            price *
+                                                                currentCurrency.rate *
+                                                                100
+                                                        ) / 100}
                                                     </div>
                                                 </div>
                                                 <button
                                                     onClick={() =>
-                                                        getCurrencyRates()
+                                                        addProductToCart(id)
                                                     }
                                                 >
                                                     Add to cart
@@ -156,8 +243,98 @@ const App = (props: Props) => {
                                 )}
                             </ul>
                         </div>
+                        <div className="cart">
+                            <h2>Cart</h2>
+                            <ul className="cart-items-list">
+                                <li
+                                    className="cart-empty"
+                                    style={{
+                                        display: `${
+                                            Object.keys(productsInCart)
+                                                .length === 0
+                                                ? 'block'
+                                                : 'none'
+                                        }`,
+                                    }}
+                                >
+                                    There is nothing in your cart.
+                                </li>
+                                {Object.keys(productsInCart).map(
+                                    (productId) => (
+                                        <CartItem
+                                            key={productId}
+                                            product={
+                                                productsObject[
+                                                    parseInt(productId)
+                                                ]
+                                            }
+                                            productCount={
+                                                productsInCart[
+                                                    parseInt(productId)
+                                                ]
+                                            }
+                                            currency={
+                                                currencyCodesObject[
+                                                    currentCurrency.code
+                                                ]
+                                            }
+                                            currencyRate={currentCurrency.rate}
+                                            removeProductFromCart={
+                                                removeProductFromCart
+                                            }
+                                            changeProductQuantity={
+                                                changeProductQuantity
+                                            }
+                                        />
+                                    )
+                                )}
+                            </ul>
+                            <div
+                                style={{
+                                    display: `${
+                                        Object.keys(productsInCart).length !== 0
+                                            ? 'block'
+                                            : 'none'
+                                    }`,
+                                }}
+                            >
+                                <div className="total">
+                                    Total:{' '}
+                                    {currencyCodesObject[currentCurrency.code]}{' '}
+                                    {Math.round(
+                                        Object.keys(productsInCart).reduce(
+                                            (total, productId) =>
+                                                total +
+                                                productsObject[
+                                                    parseInt(productId)
+                                                ].price *
+                                                    productsInCart[
+                                                        parseInt(productId)
+                                                    ] *
+                                                    currentCurrency.rate,
+                                            0
+                                        ) * 100
+                                    ) / 100}
+                                </div>
+                                <div className="checkout-button">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsMessageShown(true)}
+                                    >
+                                        Checkout
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
+                <PopUpMessage
+                    isShown={isMessageShown}
+                    setIsMessageShown={setIsMessageShown}
+                >
+                    Sorry, but we are a fake shop and do not accept orders. It's
+                    better for your to visit another online-shop.
+                </PopUpMessage>
             </main>
             <footer className="footer">
                 <div className="container">
